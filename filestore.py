@@ -2,7 +2,7 @@ from base64 import b64encode, b64decode     # for base 64 encoding and decoding
 from pickle import dumps, loads             # Writing a serializer is hard :(
 import os                                   # File path manipulation
 from shutil import rmtree                   # Recursive file removal
-from zlib import adler32                    # For consistent hash names
+from ctypes import c_uint32
 
 class filestore():
     def __init__(self, encoding='utf-8', overwrite=False):
@@ -15,8 +15,9 @@ class filestore():
         self.top_dir = os.getcwd()
         self.working_dir = os.path.join(self.top_dir, self.STORE)
         self.overwrite = overwrite
-        self.serializer = dumps
-        self.deserializer = loads
+        self.serializer = dumps     # From pickle
+        self.deserializer = loads   # From pickle
+        self.hasher = cFNV32
 
         # Start by looking for the './.store/' directory
         if os.path.exists(self.STORE):
@@ -30,8 +31,7 @@ class filestore():
                 print('==> WARNING: Unsafe mode has been enabled. This generally occurs when your index file has been removed but the .store directory stuck around for some reason. You should either call self.clean_up() or remove the .store file itself and repopulate it, as it is possible that hash collisions will occur now.')
         else:
             # Create it if it does not exist
-            os.mkdir(self.STORE)
-            open(self.FILE_INDEX, 'a').close()
+            self.gen_file()
 
     def __getitem__(self, index):
         # First check if the key is in the sym_index
@@ -42,7 +42,7 @@ class filestore():
                 raise KeyError("Given key not found")
 
         # now check if the hash exists
-        name = adler32(index.encode(self.ENCODING))
+        name = self.hasher(index.encode(self.ENCODING))
         # if it does not exist
         if not os.path.isfile(os.path.join(self.working_dir, str(name))):
             raise KeyError("Given key not found")
@@ -59,13 +59,13 @@ class filestore():
             builder += "'" + elm + "': '"
             builder += str(self.get(elm)) + "', "
 
-        builder = builder.rsplit(',', 1)
+        builder = builder.rsplit(',', 1) # get rid of the final comma
         out = '}'.join(builder)
 
         return out
 
     def get(self, index):
-        name = adler32(bytes(index.encode(self.ENCODING)))
+        name = self.hasher(index.encode(self.ENCODING))
         contents = None
         with open(os.path.join(self.working_dir, str(name)), 'rb') as f:
             contents = f.read()
@@ -94,6 +94,13 @@ class filestore():
             f.close()
             #print(self.sym_index)
 
+    def gen_file(self):
+        os.mkdir(self.STORE)
+
+        if os.name == 'nt': # For windows, we have to call a windows function to hide the file
+            import ctypes
+            ctypes.windll.kernel32.SetFileAttributesW(self.STORE, 2) # Make the file hidden
+            open(self.FILE_INDEX, 'a').close()
 
     def store_data(self, data):
         # go into the storage directory
@@ -102,7 +109,11 @@ class filestore():
         os.chdir(self.top_dir)
 
     def append(self, data):
-        os.chdir(self.STORE)
+        try:
+            os.chdir(self.STORE)
+        except FileNotFoundError:
+            self.gen_file()
+            os.chdir(self.STORE)
         ins = (data),
         self._walk(ins)
         os.chdir(self.top_dir)
@@ -118,9 +129,9 @@ class filestore():
             #print(pair)
             #print(str(pair[0]) + ":" +  str(pair[1]))
             try:
-                name = adler32(bytes(pair[0].encode(self.ENCODING)))
+                name = self.hasher(bytes(pair[0].encode(self.ENCODING)))
             except AttributeError:
-                name = adler32(bytes(pair[0]))
+                name = self.hasher(bytes(pair[0]))
                 #print("Unhashable key: " + str(pair[0]) + ':' + str(pair[1]))
                 #continue
             #print(str(pair[0]) + " hashed to: " + str(name))
@@ -162,8 +173,19 @@ class filestore():
     def deserialize(self, data):
         return self.deserializer(data)
 
-    def clean_up(self):
+    def clean_up(self): # Return to the top dir and remove the .store directory.
         os.chdir(self.top_dir)
         rmtree(self.working_dir)
 
+def cFNV32(data): # Example hash function. FNVa1 (I think?) in 32 bit
+    if type(data) == bytes: # Our data may be a string or a byte string due to spaghetti code
+        data = str(data)
 
+    h = c_uint32(0x811c9dc5)
+
+    for i in range(len(data)):
+        b = ord(data[i])
+        h = (h.value ^ b) * 16777619
+        h = c_uint32(h) # Fun fact: ctypes does not support the '^' operator. AT ALL.
+
+    return h.value
