@@ -1,11 +1,12 @@
 from base64 import b64encode, b64decode     # for base 64 encoding and decoding
+from pickle import dumps, loads             # Writing a serializer is hard :(
 import os                                   # File path manipulation
 from shutil import rmtree                   # Recursive file removal
 from zlib import adler32                    # For consistent hash names
 
 class filestore():
     def __init__(self, encoding='utf-8', overwrite=False):
-        # define some constants
+        # define some variables
         self.STORE = './.store/'
         self.ENCODING = encoding
         self.FILE_INDEX = './.store/index'
@@ -14,8 +15,10 @@ class filestore():
         self.top_dir = os.getcwd()
         self.working_dir = os.path.join(self.top_dir, self.STORE)
         self.overwrite = overwrite
+        self.serializer = dumps
+        self.deserializer = loads
 
-        # Start by looking for the './Storage/' directory
+        # Start by looking for the './.store/' directory
         if os.path.exists(self.STORE):
             # Try to load the index into memory
             try:
@@ -24,7 +27,7 @@ class filestore():
                 # Index is not there, but the files are. We cannot do anything
                 # about this. We're gonna turn unsafe mode on
                 self.unsafe = True
-                print('==> WARNING: Unsafe mode has been enabled. This generally occurs when your index file has been removed but .store directory stuck around for some reason. You should either call self.clean_up() or remove the .store file itself and repopulate it, as it is possible that hash collisions will occur now.')
+                print('==> WARNING: Unsafe mode has been enabled. This generally occurs when your index file has been removed but the .store directory stuck around for some reason. You should either call self.clean_up() or remove the .store file itself and repopulate it, as it is possible that hash collisions will occur now.')
         else:
             # Create it if it does not exist
             os.mkdir(self.STORE)
@@ -68,12 +71,15 @@ class filestore():
             contents = f.read()
 
         dec = b64decode(contents)
-        return self._deserialize(dec.decode(self.ENCODING))
+        try:
+            return self.deserialize(dec.decode(self.ENCODING))
+        except (AttributeError, UnicodeDecodeError) as e:
+            return self.deserialize(dec)
 
     def load_index(self):
         with open(os.path.join(self.top_dir, self.FILE_INDEX), 'r') as f:
             tmp = f.read().split('\n')[:-1]
-            print(tmp)
+            #print(tmp)
             self.sym_index = tmp
 
     def update_index(self, name):
@@ -86,7 +92,7 @@ class filestore():
             f = open(os.path.join(self.top_dir, self.FILE_INDEX), 'a')
             f.write(name + str('\n'))
             f.close()
-            print(self.sym_index)
+            #print(self.sym_index)
 
 
     def store_data(self, data):
@@ -124,124 +130,37 @@ class filestore():
             # if the file does not exist
             if not os.path.isfile(current_file_path):
                 with open(current_file_path, 'wb') as f:
-                    serialized = self._serialize(pair[1])
-                    encoded = b64encode(serialized.encode(self.ENCODING))
+                    serialized = self.serialize(pair[1])
+                    try:
+                        encoded = b64encode(serialized.encode(self.ENCODING))
+                    except AttributeError:
+                        encoded = b64encode(serialized)
                     f.write(encoded)
             # File exists, but overwrite is true
             if self.overwrite is True and os.path.isfile(current_file_path):
                 os.remove(current_file_path)
                 with open(current_file_path, 'wb') as f:
-                    serialized = self._serialize(pair[1])
-                    encoded = b64encode(serialized.encode(self.ENCODING))
+                    serialized = self.serialize(pair[1])
+                    try:
+                        encoded = b64encode(serialized.encode(self.ENCODING))
+                    except AttributeError:
+                        encoded = b64encode(serialized)
                     f.write(encoded)
             # file does exist, nothing needs to be done
             else:
                 continue
 
-    def _serialize(self, data):
-        return self._serialize_tail(data, '')
+    def set_serializer(self, new_ser):
+        self.serializer = new_ser
 
-    def _serialize_tail(self, data, tail):
-        # Recurse over the data, turning it all into strings
-        # representing the structure
+    def set_deserializer(self, new_des):
+        self.deserializer = new_des
 
-        #base case
-        if data == None or data == [] or data == () or data == {}:
-            return tail.encode(self.ENCODING)
+    def serialize(self, data):
+        return self.serializer(data)
 
-        # Recursive cases
-        if type(data) == tuple:
-            tail += "("
-            for item in data:
-                tail += self._serialize(item)
-            tail += "),"
-            #return self._serialize_tail(data[1:], tail)
-            return tail
-
-        if type(data) == list:
-            tail += "["
-            for item in data:
-                tail += self._serialize(item)
-            tail += "],"
-            #return self._serialize_tail(data[1:], tail)
-            return tail
-
-        if type(data) == dict:
-            tail += '{'
-            for key, val in data.items():
-                tail += self._serialize(key)
-                tail += "::"
-                tail += self._serialize(val)
-            tail += '},'
-            return tail
-
-        if type(data) == int:
-            return "int" + ':' + str(data) + ","
-        if type(data) == float:
-            return "float" + ':' + str(data) + ","
-        if type(data) == str:
-            return "str" + ':"' + str(data) + '",'
-        if type(data) == bytes:
-            return "bytes" + ':"' + str(data) + '",'
-
-        # if all else fails...
-        new_type = str(type(data))
-        new_type = new_type[new_type.find("'") + 1:new_type.rfind("'")]
-        return new_type + ':' + str(data) + ','
-
-    def _deserialize(self, data):
-        # Input as one long string. Items between matching ()'s are tuples,
-        # []'s are lists, and {}'s are dictionaries. Each singleton is a 
-        # singleton. 
-
-        # first, split the data into singletons
-        # those being: values, ()'s, []'s, {}'s
-        builder = ''
-        i = 0
-        in_string = False
-        string_char = ''
-
-        while i < len(data):
-            l = data[i]
-            # if there is a (, [, or { just write it to the builder. 
-            # otherwise, evaluate the type and write it stringified.
-            #print("L is: " + l + ", I is: " + str(i))
-
-            if l == '(' or l == '[' or l == '{' or l == ',' or \
-                l == ')'or l == ']' or l == '}' or l == ':':
-                builder += l
-                if l == ':':
-                    i += 2
-                else:
-                    i += 1
-            else:
-                # i.e., int, str, float
-                subtype = data[i: data.find(':', i)]
-
-                if subtype == "str":
-                    in_string = True
-                    string_char = data[data.find(':', i) + 1]
-                    #print("IN STRING: STR_CHAR: " + string_char)
-
-                # handle the case where the value is a string with items after it.
-                if in_string is True:
-                    # +5 because thats the length of "str:" + 1
-                    value = data[data.find(':', i) + 1: data.find(string_char, i + 5) + 1]
-                    i = data.find(string_char, i + 5) + 1
-                    in_string = False
-                else:
-                    value = data[data.find(':', i) + 1:data.find(',', i)]
-                    i = data.find(',', i)
-
-                builder += value
-                #print("Subtype: " + str(subtype))
-                #print("Value: " + str(value))
-
-            # For dictionaries only. Need to fix this...
-            builder = builder.replace(',:', ':')
-
-        #print(builder)
-        return eval(builder[:-1]) # Drop the last comma for python's eval to not be wonky
+    def deserialize(self, data):
+        return self.deserializer(data)
 
     def clean_up(self):
         os.chdir(self.top_dir)
