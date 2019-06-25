@@ -17,7 +17,7 @@ class filestore():
 
         # Start by looking for the './Storage/' directory
         if os.path.exists(self.STORE):
-            # maybe load the info into memory?
+            # Try to load the index into memory
             try:
                 self.load_index()
             except FileNotFoundError:
@@ -32,7 +32,7 @@ class filestore():
 
     def __getitem__(self, index):
         # First check if the key is in the sym_index
-        if self.unsafe is False:
+        if not self.unsafe:
             try:
                 self.sym_index.index(index)
             except ValueError: # if not found
@@ -46,6 +46,9 @@ class filestore():
             return None
         else:
             return self.get(index)
+
+    def __repr__(self):
+        return str(self)
 
     def __str__(self):
         builder = '{'
