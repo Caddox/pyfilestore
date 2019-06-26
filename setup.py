@@ -4,7 +4,7 @@ with open("README.md", 'r') as f:
     long_des = f.read()
 
 setuptools.setup(
-    name='filestore-pkg-caddox',
+    name='py-filestore',
     author="Rhys Salkind",
     version='1.0.0',
     description="A python package that implements a static dictionary as a file system.",
