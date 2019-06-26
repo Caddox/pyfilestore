@@ -1,3 +1,2 @@
-# Blank for now. 
-
-name = "filestore._pkg"
+from filestore import filestore
+Filestore = filestore.Filestore

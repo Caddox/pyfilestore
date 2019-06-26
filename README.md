@@ -4,13 +4,13 @@ This is a simple package meant to create a static data structure similar to a di
 
 #### Example usage
 ```python
-from filestore import filestore as fs
+from filestore import Filestore
 
-# You can pass your prefered encoding in:
-# store = fs(encoding='ascii') # It defaults to utf-8
+# You can pass your preferred encoding in:
+# store = Filestore(encoding='ascii') # It defaults to utf-8
 # You can also force overwriting on population with
-# store = fs(overwrite=True)
-store = fs()
+# store = Filestore(overwrite=True)
+store = Filestore()
 
 # You can treat this just like a python dictionary!
 # You can populate it in two ways:
@@ -34,12 +34,12 @@ print(alpha[1])
 store.clean_up() # All the saved data is gone now.
 ```
 
-##### How it works:
+#### How it works:
 Creating an instance of the class will create a directory on the system that will hold all the given information. An index file is created to allow repopulation over different sessions. 
 
 When data is added to the *filestore*, the class hashes the key with a naive, non-cryptographic hashing algorithm called [FNV-1a](https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function#FNV-1a_hash) in 32 bits. This hash becomes the name of the file. **I have no proof that collisions are completely handled yet.**
 
  The actual data gets serialized with python's [pickle](https://docs.python.org/3/library/pickle.html) and then encoded into base64 before being written to the disk. If your data is not compatible with [pickle](https://docs.python.org/3/library/pickle.html), you can write and assign your own serializer/deserializer using `store.set_serializer(my_serializer_function)` and `store.set_deserializer(my_deserializer_function)` prior to inserting or removing data.
 
- ##### Tests
- Currently, the testing .py file is not comprehensive.
+ #### Tests
+ Currently, the testing .py file is not comprehensive and tests random strings of a specific length for collisions. It could use some work, but it does prove that [FNV-1a](https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function#FNV-1a_hash) has collisions if you look hard enough.
