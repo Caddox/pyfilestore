@@ -3,6 +3,11 @@
 This is a simple package meant to create a static data structure similar to a dictionary that exists as a group of files.
 
 #### Example usage
+First, download it using pip:
+
+    pip install py-filestore
+
+Then:
 ```python
 from filestore import Filestore
 
@@ -33,6 +38,8 @@ print(alpha[1])
 # However, this leaves residue on the file system. We can clean that up too!
 store.clean_up() # All the saved data is gone now.
 ```
+
+
 
 #### How it works:
 Creating an instance of the class will create a directory on the system that will hold all the given information. An index file is created to allow repopulation over different sessions. 

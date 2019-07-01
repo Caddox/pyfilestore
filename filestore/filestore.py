@@ -93,6 +93,50 @@ class Filestore():
             # Entry does not exist, so append it in.
             self.append((key, value))
 
+    def __delitem__(self, key):
+        # First, check if the key exists
+        try:
+            self.__getitem__(key)
+        except KeyError as e:
+            print(e)
+            return
+
+        # Hash the key to find the name it is listed under.
+        try:
+            name = self.hasher(bytes(key.encode(self.ENCODING)))
+        except AttributeError:
+            name = self.hasher(bytes(key))
+
+        # We need to remove it from three places:
+        # 1) The index file
+        # 2) The self.sym_index
+        # 3) The self.STORE file.
+        # 2 and 3 are easy, 1 is not.
+
+        # 2:
+        index = self.sym_index.index(key)
+        del self.sym_index[index]
+
+        # 3:
+        filepath = os.path.join(self.working_dir, str(name))
+        os.remove(filepath)
+
+        # 1: The name is saved pre-hashing in the index file
+        with open(self.FILE_INDEX, 'r+') as f:
+            lines = f.readlines()
+            f.seek(0)
+            search_key = str(key) + '\n'
+
+            for elm in lines:
+                if elm == search_key: # The line we want to remove
+                    continue
+                else:
+                    f.write(elm)
+
+            f.truncate()
+
+
+
     def __repr__(self):
         return str(self)
 
@@ -277,6 +321,14 @@ class Filestore():
         rmtree(self.working_dir)
         del self.sym_index
         self.sym_index = []
+
+    def format(self):
+        '''
+        Cleans up the existing file system and resets it for more use.
+        Clears out the .store and recreates it essentially.
+        '''
+        self.clean_up()
+        self.gen_file()
 
 def cFNV32(data): # Example hash function. FNVa1 in 32 bit
     '''

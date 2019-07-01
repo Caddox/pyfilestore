@@ -4,3 +4,4 @@
 /dist
 /build
 /filestore*
+/py_filestore.egg*
