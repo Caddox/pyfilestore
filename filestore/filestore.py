@@ -79,7 +79,6 @@ class Filestore():
             name = self.hasher(bytes(key.encode(self.ENCODING)))
         except AttributeError:
             name = self.hasher(bytes(key))
-        print('NAME: ' + str(name))
 
         # Get the filepath for the file that may or may not exist
         # also get the serialized data.
@@ -194,7 +193,6 @@ class Filestore():
             tmp = f.read().split('\n')[:-1]
             #print(tmp)
             for t in tmp:  
-                print(t)
                 try:
                     self.sym_index.append(literal_eval(t))
                 except ValueError:
@@ -342,7 +340,7 @@ class Filestore():
         del self.sym_index
         self.sym_index = []
 
-    def format(self):
+    def clear(self):
         '''
         Cleans up the existing file system and resets it for more use.
         Clears out the .store and recreates it essentially.
