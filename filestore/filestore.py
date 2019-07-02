@@ -10,6 +10,7 @@ from pickle import dumps, loads             # Writing a serializer is hard :(
 import os                                   # File path manipulation
 from shutil import rmtree                   # Recursive file removal
 from ctypes import c_uint32                 # For c-like overflowing while hashing
+from ast import literal_eval                # For numerical insert loading. (Otherwise the hash is wrong.)
 
 class Filestore():
     """ This class implements the filestore class and logic.
@@ -29,7 +30,7 @@ class Filestore():
         self.overwrite = overwrite
         self.serializer = dumps     # From pickle
         self.deserializer = loads   # From pickle
-        self.hasher = cFNV32        # Small hash
+        self.hasher = cFNV32        # Default hash
 
         # Start by looking for the './.store/' directory
         if os.path.exists(self.STORE):
@@ -54,7 +55,11 @@ class Filestore():
                 raise KeyError("Given key not found")
 
         # now check if the hash exists
-        name = self.hasher(index.encode(self.ENCODING))
+        try:
+            name = self.hasher(bytes(index.encode(self.ENCODING)))
+        except AttributeError:
+            name = self.hasher(bytes(index))
+
         # if it does not exist
         if not os.path.isfile(os.path.join(self.working_dir, str(name))):
             raise KeyError("Given key not found")
@@ -74,6 +79,7 @@ class Filestore():
             name = self.hasher(bytes(key.encode(self.ENCODING)))
         except AttributeError:
             name = self.hasher(bytes(key))
+        print('NAME: ' + str(name))
 
         # Get the filepath for the file that may or may not exist
         # also get the serialized data.
@@ -143,8 +149,12 @@ class Filestore():
     def __str__(self):
         builder = '{'
         for elm in self.sym_index:
-            builder += "'" + elm + "': '"
-            builder += str(self.get(elm)) + "', "
+            if type(elm) is str:
+                builder += "'" + elm + "': '"
+                builder += str(self.get(elm)) + "', "
+            else:
+                builder += str(elm) + ': '
+                builder += str(self.get(elm)) + ", "
 
         if len(self.sym_index) == 0:
             builder += '}'
@@ -160,7 +170,11 @@ class Filestore():
         Gets the data out of the key.
         __getitem__ performs the existence checks.
         """
-        name = self.hasher(index.encode(self.ENCODING))
+        try:
+            name = self.hasher(bytes(index.encode(self.ENCODING)))
+        except AttributeError:
+            name = self.hasher(bytes(index))
+
         contents = None
         with open(os.path.join(self.working_dir, str(name)), 'rb') as f:
             contents = f.read()
@@ -179,7 +193,13 @@ class Filestore():
         with open(os.path.join(self.top_dir, self.FILE_INDEX), 'r') as f:
             tmp = f.read().split('\n')[:-1]
             #print(tmp)
-            self.sym_index = tmp
+            for t in tmp:  
+                print(t)
+                try:
+                    self.sym_index.append(literal_eval(t))
+                except ValueError:
+                    self.sym_index.append(t)
+            #self.sym_index = tmp
 
     def update_index(self, name):
         '''
@@ -193,7 +213,7 @@ class Filestore():
         except ValueError:
             self.sym_index.append(name)
             f = open(os.path.join(self.top_dir, self.FILE_INDEX), 'a')
-            f.write(name + str('\n'))
+            f.write(str(name) + str('\n'))
             f.close()
             #print(self.sym_index)
 
