@@ -10,6 +10,7 @@ First, download it using pip:
 Then:
 ```python
 from filestore import Filestore
+import requests
 
 # You can pass your preferred encoding in:
 # store = Filestore(encoding='ascii') # It defaults to utf-8
@@ -21,16 +22,22 @@ store = Filestore()
 # You can populate it in two ways:
 store['a'] = (1,2,3) 
 store.append(('b', "The alphabet is pretty cool"))
+store[1] = [13.23, 321.0]
+# You can store any data that is supported by python's own
+# pickle package. 
+store['res'] = requests.get("https://api.github.com/")
+# And if you have data that is not supported, you can write
+# and set your own serializer and deserializer for it.
 
 print(store)
-# >>> {'a': '(1, 2, 3)', 'b': 'The alphabet is pretty cool'}
+# {'a': '(1, 2, 3)', 'b': 'The alphabet is pretty cool', 'res': '<Response [200]>', 1: [13.23, 321.0]}
 
 # You can get items out too!
 alpha = store['a']
 print(alpha)
-# >>> (1, 2, 3)
+# (1, 2, 3)
 print(alpha[1])
-# >>> 2
+# 2
 
 # The dictionary is saved to file under the directory ./.store
 # which means you can close the session and return for it later
@@ -49,4 +56,4 @@ When data is added to the *filestore*, the class hashes the key with a naive, no
  The actual data gets serialized with python's [pickle](https://docs.python.org/3/library/pickle.html) and then encoded into base64 before being written to the disk. If your data is not compatible with [pickle](https://docs.python.org/3/library/pickle.html), you can write and assign your own serializer/deserializer using `store.set_serializer(my_serializer_function)` and `store.set_deserializer(my_deserializer_function)` prior to inserting or removing data.
 
  #### Tests
- Currently, the testing .py file is not comprehensive and tests random strings of a specific length for collisions. It could use some work, but it does prove that [FNV-1a](https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function#FNV-1a_hash) has collisions if you look hard enough.
+ Currently, the testing .py file is not comprehensive and tests random strings of a specific length for collisions. It could use some work, but it does prove that [FNV-1a](https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function#FNV-1a_hash) has collisions if you look hard enough. 
