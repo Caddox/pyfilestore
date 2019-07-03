@@ -140,8 +140,6 @@ class Filestore():
 
             f.truncate()
 
-
-
     def __repr__(self):
         return str(self)
 
@@ -192,12 +190,9 @@ class Filestore():
         with open(os.path.join(self.top_dir, self.FILE_INDEX), 'r') as f:
             tmp = f.read().split('\n')[:-1]
             #print(tmp)
-            for t in tmp:  
-                try:
-                    self.sym_index.append(literal_eval(t))
-                except ValueError:
-                    self.sym_index.append(t)
-            #self.sym_index = tmp
+            for t in tmp:
+                t = self.untype_string(t)
+                self.sym_index.append(t)
 
     def update_index(self, name):
         '''
@@ -211,9 +206,34 @@ class Filestore():
         except ValueError:
             self.sym_index.append(name)
             f = open(os.path.join(self.top_dir, self.FILE_INDEX), 'a')
-            f.write(str(name) + str('\n'))
+            insert_val = self.type_string(name)
+            f.write(insert_val + str('\n'))
             f.close()
             #print(self.sym_index)
+
+    def type_string(self, var):
+        '''
+        Alters anything not nativity a string to contain a marker
+        showing that the following variable needs to be evaluated
+        into a default data type. Undone with self.untype_string.
+        '''
+        if not isinstance(var, str):
+            return '::' + str(var)
+
+        return var
+
+    def untype_string(self, var):
+        '''
+        Checks if the string from the file has a '::' at the beginning,
+        if it does it evaluates it into a data type that is not a string.
+        Without this functionality, loading keys can mistake integers for
+        strings, leading to a hash error.
+        '''
+        if var.find('::', 0, 2) == -1: # '::' is found in the first two spots
+            return var
+        else:
+            _, value = var.split('::') # returns a list like ['', 'value'], so ignore the first
+            return literal_eval(value)
 
     def gen_file(self):
         '''
@@ -226,7 +246,9 @@ class Filestore():
         if os.name == 'nt': # For windows, we have to call a windows function to hide the file
             from ctypes import windll
             windll.kernel32.SetFileAttributesW(self.STORE, 2) # Make the file hidden
-            open(self.FILE_INDEX, 'a').close()
+
+        # Open the index file on all systems and write nothing to it.
+        open(self.FILE_INDEX, 'a').close()
 
     def store_data(self, data):
         '''
@@ -312,7 +334,7 @@ class Filestore():
     def set_deserializer(self, new_des):
         ''' Sets the deserializer function for use. '''
         self.deserializer = new_des
-        
+
     def set_hasher(self, new_hash):
         ''' Sets the hasher for use. ''' 
         self.hasher = new_hash
