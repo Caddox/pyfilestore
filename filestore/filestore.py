@@ -2,8 +2,7 @@
 This module holds the following classes:
 Filestore: A class for storing a dictionary-like structure on the file.
 
-This module holds the following functions:
-    cFNV32: A hashing function based on FNV-1a. 32 bit.
+This module holds no non-class functions.
 """
 from base64 import b64encode, b64decode     # for base 64 encoding and decoding
 from pickle import dumps, loads             # Writing a serializer is hard :(
@@ -11,6 +10,7 @@ import os                                   # File path manipulation
 from shutil import rmtree                   # Recursive file removal
 from ctypes import c_uint32                 # For c-like overflowing while hashing
 from ast import literal_eval                # For numerical insert loading. (Otherwise the hash is wrong.)
+from struct import pack                     # For consistent hashing values regardless of variable type.
 
 class Filestore():
     """ This class implements the filestore class and logic.
@@ -30,7 +30,7 @@ class Filestore():
         self.overwrite = overwrite
         self.serializer = dumps     # From pickle
         self.deserializer = loads   # From pickle
-        self.hasher = cFNV32        # Default hash
+        self.hasher = self.cFNV32   # Default hash
 
         # Start by looking for the './.store/' directory
         if os.path.exists(self.STORE):
@@ -55,10 +55,7 @@ class Filestore():
                 raise KeyError("Given key not found")
 
         # now check if the hash exists
-        try:
-            name = self.hasher(bytes(index.encode(self.ENCODING)))
-        except AttributeError:
-            name = self.hasher(bytes(index))
+        name = self.hasher(index)
 
         # if it does not exist
         if not os.path.isfile(os.path.join(self.working_dir, str(name))):
@@ -75,11 +72,7 @@ class Filestore():
                 i = -1
 
         # Get the hash of the item
-        try:
-            name = self.hasher(bytes(key.encode(self.ENCODING)))
-        except AttributeError:
-            name = self.hasher(bytes(key))
-
+        name = self.hasher(key)
         # Get the filepath for the file that may or may not exist
         # also get the serialized data.
         file_path = os.path.join(self.working_dir, str(name))
@@ -107,11 +100,7 @@ class Filestore():
             return
 
         # Hash the key to find the name it is listed under.
-        try:
-            name = self.hasher(bytes(key.encode(self.ENCODING)))
-        except AttributeError:
-            name = self.hasher(bytes(key))
-
+        name = self.hasher(key)
         # We need to remove it from three places:
         # 1) The index file
         # 2) The self.sym_index
@@ -146,12 +135,19 @@ class Filestore():
     def __str__(self):
         builder = '{'
         for elm in self.sym_index:
-            if type(elm) is str:
+            if isinstance(elm, str):
                 builder += "'" + elm + "': '"
-                builder += str(self.get(elm)) + "', "
             else:
                 builder += str(elm) + ': '
-                builder += str(self.get(elm)) + ", "
+
+            item = self.get(elm)
+            if isinstance(item, str):
+                if item.find("'", 0) != -1:
+                    builder += '"' + str(item) + '", '
+                else:
+                    builder += "'" + str(item) + "', "
+            else:
+                builder += str(item) + ", "
 
         if len(self.sym_index) == 0:
             builder += '}'
@@ -167,10 +163,7 @@ class Filestore():
         Gets the data out of the key.
         __getitem__ performs the existence checks.
         """
-        try:
-            name = self.hasher(bytes(index.encode(self.ENCODING)))
-        except AttributeError:
-            name = self.hasher(bytes(index))
+        name = self.hasher(index)
 
         contents = None
         with open(os.path.join(self.working_dir, str(name)), 'rb') as f:
@@ -292,15 +285,7 @@ class Filestore():
 
         #print(data)
         for pair in data:
-            #print(pair)
-            #print(str(pair[0]) + ":" +  str(pair[1]))
-            try:
-                name = self.hasher(bytes(pair[0].encode(self.ENCODING)))
-            except AttributeError:
-                name = self.hasher(bytes(pair[0]))
-                #print("Unhashable key: " + str(pair[0]) + ':' + str(pair[1]))
-                #continue
-            #print(str(pair[0]) + " hashed to: " + str(name))
+            name = self.hasher(pair[0])
             current_file_path = os.path.join(self.working_dir, str(name))
             self.update_index(pair[0])
 
@@ -336,7 +321,15 @@ class Filestore():
         self.deserializer = new_des
 
     def set_hasher(self, new_hash):
-        ''' Sets the hasher for use. ''' 
+        '''
+        Sets the hasher for use. The hash function is required
+        to handle all simple data types (i.e., int, float, str, bytes).
+
+        NOTE: For Windows, the length of the number returned may not
+        exceed the maximum file name length of 254 characters. Please
+        ensure the assigned hash does not generate a hash longer than
+        254 characters in length.
+        '''
         self.hasher = new_hash
 
     def serialize(self, data):
@@ -370,18 +363,25 @@ class Filestore():
         self.clean_up()
         self.gen_file()
 
-def cFNV32(data): # Example hash function. FNVa1 in 32 bit
-    '''
-    Takes in a string (or bytestring) and returns a 32 bit hash output.
-    '''
-    if type(data) == bytes: # Our data may be a string or a byte string due to spaghetti code
-        data = str(data)
+    def cFNV32(self, data):
+        '''
+        A 32-bit hash function. Takes in any simple data type
+        and converts it to an iterate-able form.
+        Returns a 32-bit integer.
+        '''
+        if not isinstance(data, bytes):
+            in_type = type(data)
+            if in_type == int:
+                data = pack('i', data)
+            elif in_type == float:
+                data = pack('f', data)
+            elif in_type == str:
+                data = data.encode(self.ENCODING)
 
-    h = c_uint32(0x811c9dc5)
+        h = c_uint32(0x811c9dc5)
+        for n in data:
+            h = (h.value ^ n) * 16777619
+            h = c_uint32(h)         # Fun fact: ctypes does not support the bitwise OR operator.
+                                    # So, we convert it twice.
+        return h.value
 
-    for i in range(len(data)):
-        b = ord(data[i])
-        h = (h.value ^ b) * 16777619
-        h = c_uint32(h) # Fun fact: ctypes does not support the '^' operator. AT ALL.
-
-    return h.value
