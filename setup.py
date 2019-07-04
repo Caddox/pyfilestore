@@ -6,7 +6,7 @@ with open("README.md", 'r') as f:
 setuptools.setup(
     name='py-filestore',
     author="Rhys Salkind",
-    version='1.0.2',
+    version='1.0.3',
     description="A python package that implements a static dictionary as a file system.",
     long_description=long_des,
     long_description_content_type="text/markdown",
