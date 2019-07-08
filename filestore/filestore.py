@@ -10,8 +10,6 @@ import os                                   # File path manipulation
 from shutil import rmtree                   # Recursive file removal
 from ctypes import c_uint32                 # For c-like overflowing while hashing
 from ast import literal_eval                # For numerical insert loading. (Otherwise the hash is wrong.)
-from struct import pack                     # For consistent hashing values regardless of variable type.
-from copy import deepcopy
 
 class Filestore():
     """ This class implements the filestore class and logic.
@@ -226,7 +224,6 @@ class Filestore():
 
         return builder
 
-
     def untype_string(self, var):
         '''
         Checks if the string from the file has a '::' at the beginning,
@@ -238,8 +235,8 @@ class Filestore():
             start = var.find('<')
             end = var.find('>')
             col = literal_eval(var[start + 1:end])
-            self.collisions.append((var[3:], col))
-            return var[3:]
+            self.collisions.append((var[end + 1:], col))
+            return var[end + 1:]
         if var.find('::', 0, 5) == -1: # '::' is found in the first five spots
             return var
         else:
@@ -393,21 +390,25 @@ class Filestore():
         self.gen_file()
 
     def hasher(self, data):
-
+        '''
+        Wraps the hashing function you are using with information
+        used to detect and resolve collisions in the filestore.
+        Returns the final hash value for the input key by hashing
+        the hash if it was colliding with a previous key's hash.
+        '''
         count = 0
-        item = deepcopy(data)
 
         # Now get the hash so we can check for collisions
         origin_hash = self.hasher_func(data)
 
         # Check for new collisions by checking for file existence
         while os.path.isfile(os.path.join(self.STORE, str(origin_hash))) and \
-            item not in self.sym_index:
-            # Existance proves collision
+            data not in self.sym_index:
+            # Existence proves collision
             count += 1
             origin_hash = self.hasher_func(origin_hash)
 
-        # Handle old collisions 
+        # Handle old collisions
         if len(self.collisions) > 0:
             colls, number = zip(*self.collisions)
             if data in colls:
@@ -416,7 +417,7 @@ class Filestore():
 
         # Log the name with the collisions
         if count is not 0:
-            self.collisions.append((item, count))
+            self.collisions.append((data, count))
 
         # Return the final hash
         return origin_hash
@@ -432,10 +433,8 @@ class Filestore():
         if not isinstance(data, bytes):
             in_type = type(data)
             if in_type == int:
-                #data = pack('i', data)
                 data = data.to_bytes((data.bit_length() + 7) // 8, byteorder='little')
             elif in_type == float:
-                #data = pack('f', data)
                 fst, snd = data.as_integer_ratio()
                 total = fst + (snd << 64)
                 return self.cFNV32(total)
