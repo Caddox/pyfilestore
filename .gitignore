@@ -1,7 +1,12 @@
-/.store
-*.swp
 */__pycache__
+
 /dist
 /build
+/.store
+
 /filestore*
 /py_filestore.egg*
+
+*.7z
+*.bat
+*.swp

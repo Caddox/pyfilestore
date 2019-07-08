@@ -1,4 +1,4 @@
-from filestore import filestore as fs
+from filestore import Filestore
 import random
 import ctypes
 
@@ -24,10 +24,11 @@ def mass_test(ammount, filestore):
         data = random_string(random.randint(500, 1000))
 
         if key in keys or data in datas:
-            print("Duplicate key. Dumping . . .")
-            print('Keys:' + str(keys))
-            print('Datas:' + str(datas))
-            raise Warning("Bad shit cuz.")
+            pass
+            #print("Duplicate key. Dumping . . .")
+            #print('Keys:' + str(keys))
+            #print('Datas:' + str(datas))
+            #raise Warning("Bad shit cuz.")
 
         keys.append(key)
         datas.append(data)
@@ -89,7 +90,7 @@ def elfHash(message):
 
 
 if __name__ == "__main__":
-    tmp = fs()
+    tmp = Filestore()
     '''
     data = (('ABC', "It's as easy as one, two three!"), ('Take two!', 'Thriller is not my favorate song...'))
     tmp.store_data(data)
@@ -119,10 +120,10 @@ if __name__ == "__main__":
     lista = []
     x = 0
     try:
-        while 0:
+        while 1:
             x += 1
             print("Checked " + str(x) + " items.", end='\r')
-            line = random_string(100)
+            line = random_string(10)
             h = cFNV32(line)
             if h in [x[0] for x in lista]:
                 print("COLLISION: " + str(h))
@@ -130,7 +131,7 @@ if __name__ == "__main__":
                 i = [x[0] for x in lista].index(h)
                 print("STRING 2: " + str(lista[i][1]))
                 print("Checked " + str(len(lista)) + " items.")
-                raise Warning("Donzo")
+                #raise Warning("Donzo")
             lista.append((h, line))
     except KeyboardInterrupt:
         print('\n\nInterupted.')
