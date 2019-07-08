@@ -11,6 +11,7 @@ from shutil import rmtree                   # Recursive file removal
 from ctypes import c_uint32                 # For c-like overflowing while hashing
 from ast import literal_eval                # For numerical insert loading. (Otherwise the hash is wrong.)
 from struct import pack                     # For consistent hashing values regardless of variable type.
+from copy import deepcopy
 
 class Filestore():
     """ This class implements the filestore class and logic.
@@ -25,12 +26,13 @@ class Filestore():
         self.FILE_INDEX = './.store/index'
         self.unsafe = False
         self.sym_index = []
+        self.collisions = []
         self.top_dir = os.getcwd()
         self.working_dir = os.path.join(self.top_dir, self.STORE)
         self.overwrite = overwrite
-        self.serializer = dumps     # From pickle
-        self.deserializer = loads   # From pickle
-        self.hasher = self.cFNV32   # Default hash
+        self.serializer = dumps         # From pickle
+        self.deserializer = loads       # From pickle
+        self.hasher_func = self.cFNV32  # Default hash
 
         # Start by looking for the './.store/' directory
         if os.path.exists(self.STORE):
@@ -136,7 +138,7 @@ class Filestore():
         builder = '{'
         for elm in self.sym_index:
             if isinstance(elm, str):
-                builder += "'" + elm + "': '"
+                builder += "'" + elm + "': "
             else:
                 builder += str(elm) + ': '
 
@@ -210,10 +212,20 @@ class Filestore():
         showing that the following variable needs to be evaluated
         into a default data type. Undone with self.untype_string.
         '''
-        if not isinstance(var, str):
-            return '::' + str(var)
+        builder = ''
+        # if the variable is in the collided list
+        if len(self.collisions) > 0:
+            collided_vars, counts = zip(*self.collisions)
+            if var in collided_vars:
+                builder += '<' + str(counts[collided_vars.index(var)]) + '>'
 
-        return var
+        if not isinstance(var, str):
+            builder += '::' + str(var)
+        else:
+            builder += var
+
+        return builder
+
 
     def untype_string(self, var):
         '''
@@ -222,11 +234,26 @@ class Filestore():
         Without this functionality, loading keys can mistake integers for
         strings, leading to a hash error.
         '''
-        if var.find('::', 0, 2) == -1: # '::' is found in the first two spots
+        if var.find('<', 0, 5) != -1:
+            start = var.find('<')
+            end = var.find('>')
+            col = literal_eval(var[start + 1:end])
+            self.collisions.append((var[3:], col))
+            return var[3:]
+        if var.find('::', 0, 5) == -1: # '::' is found in the first five spots
             return var
         else:
-            _, value = var.split('::') # returns a list like ['', 'value'], so ignore the first
-            return literal_eval(value)
+            collisions, value = var.split('::') # returns a list like ['<collisions>', 'value']
+            evaled = literal_eval(value)
+
+            if collisions != '':
+                # Note the item in the collisions list
+                start = collisions.find('<')
+                end = collisions.find('>')
+                col = literal_eval(collisions[start + 1:end])
+                self.collisions.append((evaled, col))
+
+            return evaled
 
     def gen_file(self):
         '''
@@ -320,9 +347,9 @@ class Filestore():
         ''' Sets the deserializer function for use. '''
         self.deserializer = new_des
 
-    def set_hasher(self, new_hash):
+    def set_hasher_func(self, new_hash):
         '''
-        Sets the hasher for use. The hash function is required
+        Sets the hasher_func for use. The hash function is required
         to handle all simple data types (i.e., int, float, str, bytes).
 
         NOTE: For Windows, the length of the number returned may not
@@ -330,7 +357,7 @@ class Filestore():
         ensure the assigned hash does not generate a hash longer than
         254 characters in length.
         '''
-        self.hasher = new_hash
+        self.hasher_func = new_hash
 
     def serialize(self, data):
         ''' Serializes the data using the set serializer. '''
@@ -353,7 +380,9 @@ class Filestore():
         os.chdir(self.top_dir)
         rmtree(self.working_dir)
         del self.sym_index
+        del self.collisions
         self.sym_index = []
+        self.collisions = []
 
     def clear(self):
         '''
@@ -363,12 +392,43 @@ class Filestore():
         self.clean_up()
         self.gen_file()
 
+    def hasher(self, data):
+
+        count = 0
+        item = deepcopy(data)
+
+        # Now get the hash so we can check for collisions
+        origin_hash = self.hasher_func(data)
+
+        # Check for new collisions by checking for file existence
+        while os.path.isfile(os.path.join(self.STORE, str(origin_hash))) and \
+            item not in self.sym_index:
+            # Existance proves collision
+            count += 1
+            origin_hash = self.hasher_func(origin_hash)
+
+        # Handle old collisions 
+        if len(self.collisions) > 0:
+            colls, number = zip(*self.collisions)
+            if data in colls:
+                for _ in range(number[colls.index(data)]):
+                    origin_hash = self.hasher_func(origin_hash)
+
+        # Log the name with the collisions
+        if count is not 0:
+            self.collisions.append((item, count))
+
+        # Return the final hash
+        return origin_hash
+
+
     def cFNV32(self, data):
         '''
         A 32-bit hash function. Takes in any simple data type
         and converts it to an iterate-able form.
         Returns a 32-bit integer.
         '''
+        # First convert the data into a bytes format
         if not isinstance(data, bytes):
             in_type = type(data)
             if in_type == int:
