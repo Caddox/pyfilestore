@@ -432,9 +432,13 @@ class Filestore():
         if not isinstance(data, bytes):
             in_type = type(data)
             if in_type == int:
-                data = pack('i', data)
+                #data = pack('i', data)
+                data = data.to_bytes((data.bit_length() + 7) // 8, byteorder='little')
             elif in_type == float:
-                data = pack('f', data)
+                #data = pack('f', data)
+                fst, snd = data.as_integer_ratio()
+                total = fst + (snd << 64)
+                return self.cFNV32(total)
             elif in_type == str:
                 data = data.encode(self.ENCODING)
 
